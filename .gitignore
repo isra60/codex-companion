@@ -1,0 +1,4 @@
+node_modules/
+companion-service/logs/
+companion-service/*.log
+.env

@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Codex Companion</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/dashboard/index.css">
+  </head>
+  <body>
+    <main class="shell">
+      <section class="device" id="device">
+        <header class="topbar">
+          <div class="brand">
+            <span class="tiny-led" id="headerLed"></span>
+            <span>Codex Companion</span>
+          </div>
+          <div class="wifi">
+            <span id="clientCount">0</span>
+            <span class="wifi-mark"></span>
+          </div>
+        </header>
+
+        <section class="auth-panel" id="authPanel">
+          <div class="auth-title">Auth token</div>
+          <input id="tokenInput" class="token-input" type="password" autocomplete="off" placeholder="Paste startup token">
+          <button id="tokenButton" class="primary-button" type="button">Connect</button>
+          <div class="auth-error" id="authError"></div>
+        </section>
+
+        <section class="screen" id="mainScreen">
+          <section class="status-area">
+            <div class="status-icon" id="statusIcon"></div>
+            <div class="status-text" id="statusText">Disconnected</div>
+            <div class="session-meta">
+              <div><span>Project</span><strong id="projectName">-</strong></div>
+              <div><span>Model</span><strong id="modelName">-</strong></div>
+            </div>
+          </section>
+
+          <section class="event-card" id="eventCard">
+            <div class="event-label">Latest event</div>
+            <div class="event-title" id="eventTitle">Waiting</div>
+            <div class="event-detail mono" id="eventDetail">No events yet</div>
+            <div class="event-time mono" id="eventTime">--:--:--</div>
+          </section>
+
+          <section class="action-area" id="actionArea">
+            <div class="empty-action">No pending permission</div>
+          </section>
+
+          <section class="log-panel">
+            <div class="log-title">Event log</div>
+            <div class="log-list mono" id="logList"></div>
+          </section>
+        </section>
+
+        <section class="permission-screen" id="permissionScreen" hidden>
+          <header class="permission-head">
+            <span class="warning-mark"></span>
+            <span>Permission required</span>
+          </header>
+          <div class="permission-body">
+            <div class="permission-kicker">Codex wants to</div>
+            <div class="permission-box">
+              <div class="permission-tool" id="permissionTool">Tool</div>
+              <pre class="permission-command" id="permissionCommand"></pre>
+              <div class="permission-path mono" id="permissionPath"></div>
+            </div>
+            <div class="decision-buttons">
+              <button class="decision allow" id="allowButton" type="button">
+                <span>ALLOW</span>
+                <strong>OK</strong>
+              </button>
+              <button class="decision deny" id="denyButton" type="button">
+                <span>DENY</span>
+                <strong>NO</strong>
+              </button>
+            </div>
+            <div class="timeout mono" id="permissionTimeout">Timeout: 1:50</div>
+          </div>
+        </section>
+
+        <section class="summary-screen" id="summaryScreen" hidden>
+          <header class="summary-head">
+            <span class="check-mark"></span>
+            <span>Session complete</span>
+          </header>
+          <div class="summary-grid">
+            <div>
+              <span>Duration</span>
+              <strong id="summaryDuration">0s</strong>
+            </div>
+            <div>
+              <span>Events</span>
+              <strong id="summaryEvents">0</strong>
+            </div>
+          </div>
+          <div class="summary-list">
+            <h2>Files modified</h2>
+            <ul id="summaryFiles"></ul>
+          </div>
+          <div class="summary-list">
+            <h2>Commands run</h2>
+            <ul id="summaryCommands"></ul>
+          </div>
+        </section>
+      </section>
+    </main>
+    <script src="/dashboard/app.js" defer></script>
+  </body>
+</html>

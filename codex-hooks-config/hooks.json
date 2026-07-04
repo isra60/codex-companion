@@ -1,0 +1,69 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node %USERPROFILE%/.codex/hooks/on-session-start.js",
+            "statusMessage": "Notifying companion...",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node %USERPROFILE%/.codex/hooks/on-user-prompt.js",
+            "statusMessage": "Notifying companion...",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node %USERPROFILE%/.codex/hooks/on-post-tool-use.js",
+            "statusMessage": "Logging tool usage...",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node %USERPROFILE%/.codex/hooks/on-permission.js",
+            "statusMessage": "Waiting for companion approval...",
+            "timeout": 120
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node %USERPROFILE%/.codex/hooks/on-stop.js",
+            "statusMessage": "Notifying companion...",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
