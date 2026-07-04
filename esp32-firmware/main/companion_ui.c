@@ -5,7 +5,9 @@
 
 #include "bsp/esp-bsp.h"
 #include "bsp/display.h"
+#include "bsp/touch.h"
 #include "esp_log.h"
+#include "esp_lv_adapter.h"
 #include "lvgl.h"
 
 static const char *TAG = "ui";
@@ -24,6 +26,101 @@ static lv_obj_t *s_summary_label;
 
 static void allow_event_cb(lv_event_t *event);
 static void deny_event_cb(lv_event_t *event);
+
+static void rounder_event_cb(lv_event_t *event)
+{
+    lv_area_t *area = (lv_area_t *)lv_event_get_param(event);
+    if (!area) {
+        return;
+    }
+
+    area->x1 = (area->x1 >> 1) << 1;
+    area->y1 = (area->y1 >> 1) << 1;
+    area->x2 = ((area->x2 >> 1) << 1) + 1;
+    area->y2 = ((area->y2 >> 1) << 1) + 1;
+}
+
+static bool ui_lock(int32_t timeout_ms)
+{
+    return esp_lv_adapter_lock(timeout_ms) == ESP_OK;
+}
+
+static void ui_unlock(void)
+{
+    esp_lv_adapter_unlock();
+}
+
+static lv_display_t *companion_display_start(void)
+{
+    bsp_display_cfg_t cfg = {
+        .lv_adapter_cfg = ESP_LV_ADAPTER_DEFAULT_CONFIG(),
+        .rotation = ESP_LV_ADAPTER_ROTATE_0,
+        .tear_avoid_mode = ESP_LV_ADAPTER_TEAR_AVOID_MODE_NONE,
+        .touch_flags = {
+            .swap_xy = 1,
+            .mirror_x = 0,
+            .mirror_y = 1,
+        },
+    };
+
+    if (esp_lv_adapter_init(&cfg.lv_adapter_cfg) != ESP_OK) {
+        ESP_LOGE(TAG, "esp_lv_adapter_init failed");
+        return NULL;
+    }
+
+    esp_lcd_panel_handle_t panel = NULL;
+    esp_lcd_panel_io_handle_t panel_io = NULL;
+    const bsp_display_config_t display_cfg = {
+        .max_transfer_sz = BSP_LCD_H_RES * 20 * BSP_LCD_BITS_PER_PIXEL / 8,
+    };
+    if (bsp_display_new(&display_cfg, &panel, &panel_io) != ESP_OK) {
+        ESP_LOGE(TAG, "bsp_display_new failed");
+        return NULL;
+    }
+
+    esp_lv_adapter_display_config_t adapter_display_cfg = {
+        .panel = panel,
+        .panel_io = panel_io,
+        .profile = {
+            .interface = ESP_LV_ADAPTER_PANEL_IF_OTHER,
+            .rotation = cfg.rotation,
+            .hor_res = BSP_LCD_H_RES,
+            .ver_res = BSP_LCD_V_RES,
+            .buffer_height = 20,
+            .use_psram = false,
+            .enable_ppa_accel = false,
+            .require_double_buffer = false,
+        },
+        .tear_avoid_mode = cfg.tear_avoid_mode,
+    };
+
+    lv_display_t *display = esp_lv_adapter_register_display(&adapter_display_cfg);
+    if (!display) {
+        ESP_LOGE(TAG, "esp_lv_adapter_register_display failed");
+        return NULL;
+    }
+    lv_display_add_event_cb(display, rounder_event_cb, LV_EVENT_INVALIDATE_AREA, NULL);
+
+    esp_lcd_touch_handle_t touch = NULL;
+    if (bsp_touch_new(&cfg, &touch) == ESP_OK) {
+        const esp_lv_adapter_touch_config_t touch_cfg = ESP_LV_ADAPTER_TOUCH_DEFAULT_CONFIG(display, touch);
+        if (!esp_lv_adapter_register_touch(&touch_cfg)) {
+            ESP_LOGW(TAG, "touch registration failed");
+        }
+    } else {
+        ESP_LOGW(TAG, "touch init failed");
+    }
+
+    if (bsp_display_brightness_init() != ESP_OK) {
+        ESP_LOGW(TAG, "brightness init failed");
+    }
+
+    if (esp_lv_adapter_start() != ESP_OK) {
+        ESP_LOGE(TAG, "esp_lv_adapter_start failed");
+        return NULL;
+    }
+    return display;
+}
 
 static lv_obj_t *make_label(lv_obj_t *parent, const char *text, const lv_font_t *font, lv_color_t color)
 {
@@ -56,13 +153,13 @@ static lv_obj_t *make_button(lv_obj_t *parent, const char *text, lv_color_t colo
 void companion_ui_init(companion_action_cb_t action_cb)
 {
     s_action_cb = action_cb;
-    lv_display_t *display = bsp_display_start();
+    lv_display_t *display = companion_display_start();
     if (!display) {
         ESP_LOGE(TAG, "bsp_display_start failed");
         return;
     }
 
-    if (!bsp_display_lock(1000)) {
+    if (!ui_lock(-1)) {
         ESP_LOGE(TAG, "display lock failed during init");
         return;
     }
@@ -129,7 +226,7 @@ void companion_ui_init(companion_action_cb_t action_cb)
     s_summary_label = make_label(root, "", &lv_font_montserrat_14, lv_color_hex(0x00ff87));
     lv_obj_set_width(s_summary_label, 452);
 
-    bsp_display_unlock();
+    ui_unlock();
 }
 
 void companion_ui_set_status(companion_status_t status, const char *detail)
@@ -153,13 +250,13 @@ void companion_ui_set_status(companion_status_t status, const char *detail)
         lv_color_hex(0xff4444),
     };
 
-    if (!s_status_label || !s_detail_label || !bsp_display_lock(100)) {
+    if (!s_status_label || !s_detail_label || !ui_lock(100)) {
         return;
     }
     lv_label_set_text(s_status_label, labels[status]);
     lv_obj_set_style_text_color(s_status_label, colors[status], 0);
     lv_label_set_text(s_detail_label, detail ? detail : "");
-    bsp_display_unlock();
+    ui_unlock();
 }
 
 void companion_ui_render_state(const companion_state_t *state)
@@ -170,14 +267,14 @@ void companion_ui_render_state(const companion_state_t *state)
              state->model[0] ? state->model : "-",
              state->state[0] ? state->state : "-");
 
-    if (!s_session_label || !s_permission_panel || !bsp_display_lock(100)) {
+    if (!s_session_label || !s_permission_panel || !ui_lock(100)) {
         return;
     }
     lv_label_set_text(s_session_label, session);
     if (strcmp(state->state, "permission_required") != 0) {
         lv_obj_add_flag(s_permission_panel, LV_OBJ_FLAG_HIDDEN);
     }
-    bsp_display_unlock();
+    ui_unlock();
 }
 
 void companion_ui_render_event(const companion_event_t *event)
@@ -188,11 +285,11 @@ void companion_ui_render_event(const companion_event_t *event)
              event->tool_name,
              event->detail);
 
-    if (!s_event_label || !bsp_display_lock(100)) {
+    if (!s_event_label || !ui_lock(100)) {
         return;
     }
     lv_label_set_text(s_event_label, text);
-    bsp_display_unlock();
+    ui_unlock();
 }
 
 void companion_ui_render_permission(const companion_permission_t *permission)
@@ -205,13 +302,13 @@ void companion_ui_render_permission(const companion_permission_t *permission)
     }
     snprintf(detail, sizeof(detail), "%s\n%s", permission->tool_name, body ? body : "-");
 
-    if (!s_permission_title || !s_permission_detail || !s_permission_panel || !bsp_display_lock(100)) {
+    if (!s_permission_title || !s_permission_detail || !s_permission_panel || !ui_lock(100)) {
         return;
     }
     lv_label_set_text(s_permission_title, "Permission required");
     lv_label_set_text(s_permission_detail, detail);
     lv_obj_clear_flag(s_permission_panel, LV_OBJ_FLAG_HIDDEN);
-    bsp_display_unlock();
+    ui_unlock();
 }
 
 void companion_ui_render_summary(const companion_summary_t *summary)
@@ -223,12 +320,12 @@ void companion_ui_render_summary(const companion_summary_t *summary)
              summary->files_count,
              summary->commands_count);
 
-    if (!s_summary_label || !s_permission_panel || !bsp_display_lock(100)) {
+    if (!s_summary_label || !s_permission_panel || !ui_lock(100)) {
         return;
     }
     lv_label_set_text(s_summary_label, text);
     lv_obj_add_flag(s_permission_panel, LV_OBJ_FLAG_HIDDEN);
-    bsp_display_unlock();
+    ui_unlock();
 }
 
 static void send_action(const char *action)
