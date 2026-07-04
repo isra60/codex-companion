@@ -2,3 +2,8 @@ node_modules/
 companion-service/logs/
 companion-service/*.log
 .env
+eim_config.toml
+esp32-firmware/build/
+esp32-firmware/sdkconfig
+esp32-firmware/sdkconfig.old
+esp32-firmware/managed_components/

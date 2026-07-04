@@ -1,0 +1,53 @@
+menu "Codex Companion"
+
+config COMPANION_WIFI_SSID
+    string "WiFi SSID"
+    default ""
+    help
+        Local WiFi network SSID. Stored in sdkconfig, which is ignored by git.
+
+config COMPANION_WIFI_PASSWORD
+    string "WiFi password"
+    default ""
+    help
+        Local WiFi password. Stored in sdkconfig, which is ignored by git.
+
+config COMPANION_AUTH_TOKEN
+    string "WebSocket auth token"
+    default ""
+    help
+        Token printed by companion-service at startup. Stored in sdkconfig, which is ignored by git.
+
+config COMPANION_MDNS_SERVICE
+    string "mDNS service"
+    default "_codex-companion"
+    help
+        mDNS service name to discover. Keep the default for companion-service.
+
+config COMPANION_MDNS_PROTO
+    string "mDNS protocol"
+    default "_tcp"
+    help
+        mDNS protocol to discover. Keep the default for companion-service.
+
+config COMPANION_FALLBACK_HOST
+    string "Fallback host or IP"
+    default ""
+    help
+        Optional fallback if mDNS discovery fails. Leave blank to require mDNS.
+
+config COMPANION_FALLBACK_PORT
+    int "Fallback WebSocket port"
+    default 3121
+    help
+        Used only when fallback host is set and mDNS discovery fails.
+
+config COMPANION_WIFI_CONNECT_TIMEOUT_MS
+    int "WiFi connect timeout ms"
+    default 20000
+
+config COMPANION_MDNS_QUERY_TIMEOUT_MS
+    int "mDNS query timeout ms"
+    default 5000
+
+endmenu

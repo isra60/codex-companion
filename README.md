@@ -11,6 +11,7 @@ Phase 1 implementation of a Codex hook companion service and ESP32-style web das
 - JSONL event logs per session
 - mDNS advertisement for `_codex-companion._tcp`
 - 480x480 AMOLED-style simulator that also works as a mobile dashboard
+- ESP-IDF firmware scaffold for Waveshare ESP32-S3-Touch-AMOLED-2.16 in `esp32-firmware/`
 
 ## Run
 
@@ -52,3 +53,11 @@ For a permission request:
 ```
 
 The permission hook exits `0` for allow and `2` for deny or timeout.
+
+## ESP32 firmware
+
+The hardware firmware lives in `esp32-firmware/`. It targets ESP-IDF 5.5+, uses Waveshare's official BSP component for the CO5300 AMOLED + CST9217 touch stack, discovers the companion through mDNS, and connects to the WebSocket protocol used by the dashboard.
+
+Local WiFi credentials and the WebSocket auth token are configured with `idf.py menuconfig`; the generated `esp32-firmware/sdkconfig` file is ignored by git.
+
+Reference notes from related ESP32 agent-monitor projects are in `docs/reference-projects.md`.
