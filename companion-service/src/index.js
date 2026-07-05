@@ -43,7 +43,8 @@ const httpServer = createHttpServer({
   sessionState,
   eventLog,
   authToken,
-  requireHttpAuth: REQUIRE_HTTP_AUTH
+  requireHttpAuth: REQUIRE_HTTP_AUTH,
+  getDevices: wsServer.getDevices
 });
 
 let mdnsAdvertiser = null;

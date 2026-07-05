@@ -9,7 +9,8 @@ export function createHttpServer({
   sessionState,
   eventLog,
   authToken,
-  requireHttpAuth
+  requireHttpAuth,
+  getDevices = () => []
 }) {
   const app = express();
   const server = http.createServer(app);
@@ -28,9 +29,14 @@ export function createHttpServer({
     res.json({
       status: 'ok',
       connected_clients: sessionState.getConnectedClientCount(),
+      connected_devices: getDevices().filter((device) => device.connected).length,
       active_session: sessionState.currentSession?.session_id || null,
       pending_decisions: sessionState.pendingDecisions.size
     });
+  });
+
+  app.get('/devices', authMiddleware, (_req, res) => {
+    res.json({ devices: getDevices() });
   });
 
   app.post('/event', authMiddleware, async (req, res) => {

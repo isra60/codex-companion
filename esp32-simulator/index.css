@@ -125,8 +125,8 @@ button {
 .screen {
   height: calc(100% - 40px);
   display: grid;
-  grid-template-rows: 122px 102px 132px minmax(74px, 1fr);
-  gap: 10px;
+  grid-template-rows: 118px 96px 70px minmax(74px, 1fr);
+  gap: 9px;
   padding: 12px;
 }
 
@@ -237,7 +237,7 @@ button {
 }
 
 .event-card,
-.action-area,
+.device-panel,
 .log-panel {
   min-width: 0;
   border: 1px solid var(--line);
@@ -282,12 +282,77 @@ button {
   font-size: 11px;
 }
 
-.action-area {
+.device-panel {
   display: grid;
-  place-items: center;
-  padding: 10px;
+  grid-template-rows: 18px 1fr;
+  gap: 5px;
+  padding: 8px 10px;
+  min-height: 0;
+}
+
+.device-panel-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.device-panel-title strong {
+  color: var(--accent-green);
+  font-size: 12px;
+}
+
+.device-list {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.device-row {
+  display: grid;
+  grid-template-columns: 10px 1fr;
+  gap: 8px;
+  min-width: 0;
+  align-items: center;
+  color: var(--text-primary);
+}
+
+.device-row strong,
+.device-row span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.device-row strong {
+  font-size: 11px;
+}
+
+.device-row span {
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+
+.device-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  color: var(--accent-green);
+  background: var(--accent-green);
+  box-shadow: 0 0 10px currentColor;
+}
+
+.device-row.offline .device-dot {
   color: var(--text-muted);
-  font-size: 13px;
+  background: var(--text-muted);
+}
+
+.device-empty {
+  color: var(--text-muted);
+  font-size: 11px;
 }
 
 .log-panel {
@@ -658,7 +723,7 @@ button {
 
   .screen {
     min-height: calc(100svh - 40px);
-    grid-template-rows: 128px 108px 138px minmax(120px, 1fr);
+    grid-template-rows: 128px 104px 74px minmax(120px, 1fr);
   }
 
   .permission-screen,

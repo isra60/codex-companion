@@ -32,6 +32,8 @@
   const summaryFiles = document.getElementById('summaryFiles');
   const summaryCommands = document.getElementById('summaryCommands');
   const muteToggle = document.getElementById('muteToggle');
+  const deviceCount = document.getElementById('deviceCount');
+  const deviceList = document.getElementById('deviceList');
 
   let ws = null;
   let reconnectTimer = null;
@@ -163,6 +165,11 @@
       return;
     }
 
+    if (message.type === 'devices') {
+      renderDevices(message.devices);
+      return;
+    }
+
     if (message.type === 'summary') {
       renderSummary(message);
       return;
@@ -267,6 +274,34 @@
     summaryEvents.textContent = String(data.events_count || 0);
     renderList(summaryFiles, data.files_modified);
     renderList(summaryCommands, data.commands_run);
+  }
+
+  function renderDevices(devices) {
+    const list = Array.isArray(devices) ? devices : [];
+    const connected = list.filter((deviceInfo) => deviceInfo.connected);
+    deviceCount.textContent = String(connected.length);
+    if (!list.length) {
+      deviceList.innerHTML = '<div class="device-empty">No device connected</div>';
+      return;
+    }
+
+    deviceList.innerHTML = list.map((deviceInfo) => {
+      const status = deviceInfo.connected ? deviceInfo.status || 'online' : 'offline';
+      const detail = [
+        deviceInfo.ip || '-',
+        deviceInfo.firmware || '-',
+        formatRelative(deviceInfo.last_seen)
+      ].filter(Boolean).join(' · ');
+      return `
+        <div class="device-row ${deviceInfo.connected ? 'online' : 'offline'}">
+          <span class="device-dot"></span>
+          <div>
+            <strong>${escapeHtml(deviceInfo.name || 'ESP32 Companion')}</strong>
+            <span>${escapeHtml(status)} · ${escapeHtml(detail)}</span>
+          </div>
+        </div>
+      `;
+    }).join('');
   }
 
   function sendAction(action) {
@@ -436,6 +471,18 @@
       minute: '2-digit',
       second: '2-digit'
     });
+  }
+
+  function formatRelative(timestamp) {
+    const date = timestamp ? new Date(timestamp) : null;
+    if (!date || Number.isNaN(date.getTime())) {
+      return 'never';
+    }
+    const seconds = Math.max(0, Math.round((Date.now() - date.getTime()) / 1000));
+    if (seconds < 5) return 'now';
+    if (seconds < 60) return `${seconds}s ago`;
+    const minutes = Math.round(seconds / 60);
+    return `${minutes}m ago`;
   }
 
   function escapeHtml(value) {
