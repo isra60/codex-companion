@@ -132,6 +132,13 @@ export class SessionState {
           reason: 'timeout',
           timestamp: new Date().toISOString()
         });
+        this.broadcast({
+          type: 'permission_dismissed',
+          request_id: requestId,
+          action: 'deny',
+          reason: 'timeout',
+          timestamp: new Date().toISOString()
+        });
         resolve(result);
       }, this.decisionTimeoutMs);
 
@@ -174,6 +181,12 @@ export class SessionState {
       action,
       timestamp: new Date().toISOString()
     });
+    this.broadcast({
+      type: 'permission_dismissed',
+      request_id: requestId,
+      action,
+      timestamp: new Date().toISOString()
+    });
   }
 
   updateStateAfterDecision() {
@@ -197,6 +210,7 @@ export class SessionState {
       file_path: extractFilePath(data.tool_input),
       cwd: data.cwd || null,
       message: buildHumanMessage(data),
+      timeout_s: Math.round(this.decisionTimeoutMs / 1000),
       timestamp: data.timestamp
     };
   }

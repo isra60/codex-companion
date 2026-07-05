@@ -17,15 +17,19 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 function postJson(path, body) {
   return new Promise((resolve, reject) => {
     const payload = JSON.stringify(body);
+    const headers = {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(payload)
+    };
+    if (TOKEN) {
+      headers.Authorization = `Bearer ${TOKEN}`;
+    }
     const req = http.request({
       hostname: '127.0.0.1',
       port: HTTP_PORT,
       path,
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(payload)
-      }
+      headers
     }, (res) => {
       let data = '';
       res.on('data', (chunk) => { data += chunk; });

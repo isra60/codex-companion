@@ -7,12 +7,22 @@ export function createHttpServer({
   host,
   dashboardDir,
   sessionState,
-  eventLog
+  eventLog,
+  authToken,
+  requireHttpAuth
 }) {
   const app = express();
   const server = http.createServer(app);
 
   app.use(express.json({ limit: '2mb' }));
+
+  const authMiddleware = (req, res, next) => {
+    if (!requireHttpAuth) return next();
+    const header = req.headers.authorization || '';
+    const match = header.match(/^Bearer\s+(\S+)$/i);
+    if (match && match[1] === authToken) return next();
+    return res.status(401).json({ error: 'Unauthorized. Provide Authorization: Bearer <token> header.' });
+  };
 
   app.get('/health', (_req, res) => {
     res.json({
@@ -23,7 +33,7 @@ export function createHttpServer({
     });
   });
 
-  app.post('/event', async (req, res) => {
+  app.post('/event', authMiddleware, async (req, res) => {
     const body = req.body;
     if (!body || typeof body.type !== 'string' || typeof body.session_id !== 'string') {
       return res.status(400).json({ ok: false, error: 'type and session_id are required' });
@@ -39,7 +49,7 @@ export function createHttpServer({
     return res.json({ ok: true });
   });
 
-  app.post('/decision', async (req, res) => {
+  app.post('/decision', authMiddleware, async (req, res) => {
     const body = req.body;
     if (!body || body.type !== 'permission_request' || !body.request_id || !body.tool_name) {
       return res.status(400).json({
@@ -65,6 +75,18 @@ export function createHttpServer({
         decision: 'deny',
         reason: error.message || 'Companion decision failed'
       });
+    }
+  });
+
+  app.get('/logs/:sessionId', authMiddleware, async (req, res) => {
+    try {
+      const events = await eventLog.getSessionLog(req.params.sessionId);
+      res.json({ session_id: req.params.sessionId, events });
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        return res.status(404).json({ error: 'Session log not found' });
+      }
+      return res.status(500).json({ error: error.message });
     }
   });
 

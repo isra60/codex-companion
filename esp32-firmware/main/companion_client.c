@@ -26,6 +26,11 @@ static void project_from_cwd(const char *cwd, char *dest, size_t len);
 
 esp_err_t companion_client_start(void)
 {
+    if (s_client) {
+        esp_websocket_client_destroy(s_client);
+        s_client = NULL;
+    }
+
     char uri[160];
     ESP_RETURN_ON_ERROR(discover_uri(uri, sizeof(uri)), TAG, "discovery failed");
 
@@ -34,6 +39,7 @@ esp_err_t companion_client_start(void)
         .uri = uri,
         .reconnect_timeout_ms = 3000,
         .network_timeout_ms = 10000,
+        .pingpong_timeout_sec = 30, // Fix Bug #3: WebSocket ping/keepalive
     };
     s_client = esp_websocket_client_init(&websocket_cfg);
     ESP_RETURN_ON_FALSE(s_client != NULL, ESP_ERR_NO_MEM, TAG, "websocket init failed");
@@ -48,7 +54,7 @@ void companion_client_send_action(const char *request_id, const char *action)
         return;
     }
 
-    char payload[192];
+    char payload[320];
     snprintf(payload, sizeof(payload),
              "{\"type\":\"action\",\"request_id\":\"%s\",\"action\":\"%s\"}",
              request_id,
@@ -88,7 +94,7 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base, i
 
 static esp_err_t discover_uri(char *uri, size_t uri_len)
 {
-    companion_ui_set_status(COMPANION_STATUS_DISCOVERING, "mDNS _codex-companion._tcp");
+    companion_ui_set_status(COMPANION_STATUS_DISCOVERING, "Searching companion");
     ESP_RETURN_ON_ERROR(mdns_init(), TAG, "mdns_init failed");
     mdns_hostname_set("codex-companion-esp32");
     mdns_instance_name_set("Codex Companion ESP32");
@@ -130,7 +136,7 @@ static void send_auth(void)
         return;
     }
 
-    char payload[192];
+    char payload[320];
     snprintf(payload, sizeof(payload),
              "{\"type\":\"auth\",\"token\":\"%s\"}",
              CONFIG_COMPANION_AUTH_TOKEN);

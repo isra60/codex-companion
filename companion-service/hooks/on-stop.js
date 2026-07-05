@@ -12,15 +12,19 @@ function postToCompanion(path, body) {
   return new Promise((resolve) => {
     const http = require('http');
     const payload = JSON.stringify(body);
+    const headers = {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(payload)
+    };
+    if (process.env.COMPANION_AUTH_TOKEN) {
+      headers.Authorization = `Bearer ${process.env.COMPANION_AUTH_TOKEN}`;
+    }
     const req = http.request({
       hostname: '127.0.0.1',
       port: Number(process.env.COMPANION_HTTP_PORT || 3120),
       path,
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(payload)
-      }
+      headers
     }, (res) => {
       let data = '';
       res.on('data', (chunk) => { data += chunk; });
