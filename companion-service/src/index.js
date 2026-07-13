@@ -34,13 +34,17 @@ const wsServer = createWebSocketServer({
 sessionState.setBroadcast(wsServer.broadcast);
 sessionState.setClientCountProvider(wsServer.getConnectedClientCount);
 
+const REQUIRE_HTTP_AUTH = process.env.COMPANION_REQUIRE_HTTP_AUTH === 'true';
+
 const httpServer = createHttpServer({
   port: HTTP_PORT,
   host: HOST,
   dashboardDir,
   sessionState,
   eventLog,
-  decisionTimeoutMs: DECISION_TIMEOUT_MS
+  authToken,
+  requireHttpAuth: REQUIRE_HTTP_AUTH,
+  getDevices: wsServer.getDevices
 });
 
 let mdnsAdvertiser = null;

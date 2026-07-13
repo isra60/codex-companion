@@ -9,9 +9,11 @@
 #include "esp_check.h"
 #include "esp_event.h"
 #include "esp_log.h"
+#include "esp_wifi.h"
 #include "esp_websocket_client.h"
 #include "mdns.h"
 #include "sdkconfig.h"
+#include "wifi_manager.h"
 
 static const char *TAG = "companion";
 static esp_websocket_client_handle_t s_client;
@@ -20,12 +22,18 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base, i
 static esp_err_t discover_uri(char *uri, size_t uri_len);
 static void handle_text_message(const char *data, int len);
 static void send_auth(void);
+static void send_device_hello(void);
 static void json_copy(cJSON *object, const char *name, char *dest, size_t len);
 static int json_array_size(cJSON *object, const char *name);
 static void project_from_cwd(const char *cwd, char *dest, size_t len);
 
 esp_err_t companion_client_start(void)
 {
+    if (s_client) {
+        esp_websocket_client_destroy(s_client);
+        s_client = NULL;
+    }
+
     char uri[160];
     ESP_RETURN_ON_ERROR(discover_uri(uri, sizeof(uri)), TAG, "discovery failed");
 
@@ -34,6 +42,7 @@ esp_err_t companion_client_start(void)
         .uri = uri,
         .reconnect_timeout_ms = 3000,
         .network_timeout_ms = 10000,
+        .pingpong_timeout_sec = 30, // Fix Bug #3: WebSocket ping/keepalive
     };
     s_client = esp_websocket_client_init(&websocket_cfg);
     ESP_RETURN_ON_FALSE(s_client != NULL, ESP_ERR_NO_MEM, TAG, "websocket init failed");
@@ -48,7 +57,7 @@ void companion_client_send_action(const char *request_id, const char *action)
         return;
     }
 
-    char payload[192];
+    char payload[320];
     snprintf(payload, sizeof(payload),
              "{\"type\":\"action\",\"request_id\":\"%s\",\"action\":\"%s\"}",
              request_id,
@@ -88,7 +97,7 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base, i
 
 static esp_err_t discover_uri(char *uri, size_t uri_len)
 {
-    companion_ui_set_status(COMPANION_STATUS_DISCOVERING, "mDNS _codex-companion._tcp");
+    companion_ui_set_status(COMPANION_STATUS_DISCOVERING, "Searching companion");
     ESP_RETURN_ON_ERROR(mdns_init(), TAG, "mdns_init failed");
     mdns_hostname_set("codex-companion-esp32");
     mdns_instance_name_set("Codex Companion ESP32");
@@ -130,10 +139,31 @@ static void send_auth(void)
         return;
     }
 
-    char payload[192];
+    char payload[320];
     snprintf(payload, sizeof(payload),
              "{\"type\":\"auth\",\"token\":\"%s\"}",
              CONFIG_COMPANION_AUTH_TOKEN);
+    esp_websocket_client_send_text(s_client, payload, strlen(payload), portMAX_DELAY);
+}
+
+static void send_device_hello(void)
+{
+    if (!s_client || !esp_websocket_client_is_connected(s_client)) {
+        return;
+    }
+
+    uint8_t mac[6] = {0};
+    char device_id[32] = "esp32-unknown";
+    if (esp_wifi_get_mac(WIFI_IF_STA, mac) == ESP_OK) {
+        snprintf(device_id, sizeof(device_id), "esp32-%02x%02x%02x%02x%02x%02x",
+                 mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    }
+
+    char payload[384];
+    snprintf(payload, sizeof(payload),
+             "{\"type\":\"device_hello\",\"device_id\":\"%s\",\"name\":\"ESP32 Touch\",\"firmware\":\"codex-companion-esp32\",\"protocol_version\":2,\"ip\":\"%s\",\"detail\":\"Authenticated\"}",
+             device_id,
+             wifi_manager_ip_address());
     esp_websocket_client_send_text(s_client, payload, strlen(payload), portMAX_DELAY);
 }
 
@@ -152,6 +182,7 @@ static void handle_text_message(const char *data, int len)
         cJSON *ok = cJSON_GetObjectItem(root, "ok");
         if (cJSON_IsTrue(ok)) {
             companion_ui_set_status(COMPANION_STATUS_AUTHENTICATED, "Waiting for Codex");
+            send_device_hello();
         } else {
             companion_ui_set_status(COMPANION_STATUS_ERROR, "Auth rejected");
         }

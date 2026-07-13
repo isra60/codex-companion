@@ -17,15 +17,19 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 function postJson(path, body) {
   return new Promise((resolve, reject) => {
     const payload = JSON.stringify(body);
+    const headers = {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(payload)
+    };
+    if (TOKEN) {
+      headers.Authorization = `Bearer ${TOKEN}`;
+    }
     const req = http.request({
       hostname: '127.0.0.1',
       port: HTTP_PORT,
       path,
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(payload)
-      }
+      headers
     }, (res) => {
       let data = '';
       res.on('data', (chunk) => { data += chunk; });
@@ -39,6 +43,34 @@ function postJson(path, body) {
     });
     req.on('error', reject);
     req.write(payload);
+    req.end();
+  });
+}
+
+function getJson(path) {
+  return new Promise((resolve, reject) => {
+    const headers = {};
+    if (TOKEN) {
+      headers.Authorization = `Bearer ${TOKEN}`;
+    }
+    const req = http.request({
+      hostname: '127.0.0.1',
+      port: HTTP_PORT,
+      path,
+      method: 'GET',
+      headers
+    }, (res) => {
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => {
+        try {
+          resolve({ status: res.statusCode, body: JSON.parse(data) });
+        } catch {
+          resolve({ status: res.statusCode, body: { raw: data } });
+        }
+      });
+    });
+    req.on('error', reject);
     req.end();
   });
 }
@@ -64,10 +96,44 @@ function connectDashboardClient() {
   });
 }
 
+function connectDeviceClient() {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(`ws://127.0.0.1:${WS_PORT}`);
+    const timeout = setTimeout(() => reject(new Error('Device auth timed out')), 5000);
+
+    ws.on('open', () => {
+      ws.send(JSON.stringify({ type: 'auth', token: TOKEN }));
+    });
+
+    ws.on('message', (raw) => {
+      const message = JSON.parse(raw.toString());
+      if (message.type === 'auth' && message.ok) {
+        clearTimeout(timeout);
+        ws.send(JSON.stringify({
+          type: 'device_hello',
+          device_id: 'smoke-device',
+          name: 'Smoke ESP32',
+          firmware: 'smoke-test',
+          protocol_version: 2,
+          ip: '127.0.0.2',
+          detail: 'Smoke connected'
+        }));
+        resolve(ws);
+      }
+    });
+
+    ws.on('error', reject);
+  });
+}
+
 async function main() {
   const ws = await connectDashboardClient();
+  let deviceSeen = false;
   ws.on('message', (raw) => {
     const message = JSON.parse(raw.toString());
+    if (message.type === 'devices' && message.devices?.some((device) => device.id === 'smoke-device' && device.connected)) {
+      deviceSeen = true;
+    }
     if (message.type === 'permission') {
       console.log(`permission: ${message.tool_name} ${message.command || message.message}`);
       setTimeout(() => {
@@ -79,6 +145,7 @@ async function main() {
       }, 1500);
     }
   });
+  const deviceWs = await connectDeviceClient();
 
   console.log(`session: ${sessionId}`);
   await postJson('/event', {
@@ -119,6 +186,15 @@ async function main() {
   console.log(`decision: ${decision.decision}`);
   await sleep(700);
 
+  const devices = await getJson('/devices');
+  if (devices.status !== 200 || !devices.body.devices?.some((device) => device.id === 'smoke-device')) {
+    throw new Error('Device registry smoke check failed');
+  }
+  if (!deviceSeen) {
+    throw new Error('Device broadcast smoke check failed');
+  }
+  console.log('device: smoke-device');
+
   await postJson('/event', {
     type: 'stop',
     session_id: sessionId,
@@ -126,6 +202,7 @@ async function main() {
   });
 
   await sleep(500);
+  deviceWs.close();
   ws.close();
 }
 

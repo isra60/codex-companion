@@ -1,5 +1,5 @@
 (function () {
-  const DECISION_SECONDS = 110;
+  const DEFAULT_DECISION_SECONDS = 110;
   const MAX_LOG_ENTRIES = 50;
 
   const device = document.getElementById('device');
@@ -31,14 +31,18 @@
   const summaryEvents = document.getElementById('summaryEvents');
   const summaryFiles = document.getElementById('summaryFiles');
   const summaryCommands = document.getElementById('summaryCommands');
+  const muteToggle = document.getElementById('muteToggle');
+  const deviceCount = document.getElementById('deviceCount');
+  const deviceList = document.getElementById('deviceList');
 
   let ws = null;
   let reconnectTimer = null;
   let heartbeatTimer = null;
   let permissionTimer = null;
-  let currentPermission = null;
+  let permissionQueue = [];
   let eventLog = [];
   let authed = false;
+  let soundEnabled = localStorage.getItem('codexCompanionSound') !== 'false';
 
   const params = new URLSearchParams(window.location.search);
   const wsUrl = params.get('ws') || `ws://${window.location.hostname}:3121`;
@@ -65,6 +69,17 @@
 
   allowButton.addEventListener('click', () => sendAction('allow'));
   denyButton.addEventListener('click', () => sendAction('deny'));
+
+  muteToggle.addEventListener('click', () => {
+    soundEnabled = !soundEnabled;
+    localStorage.setItem('codexCompanionSound', String(soundEnabled));
+    muteToggle.textContent = soundEnabled ? '🔔' : '🔕';
+    muteToggle.title = soundEnabled ? 'Notifications on' : 'Notifications muted';
+  });
+
+  // Init mute icon
+  muteToggle.textContent = soundEnabled ? '🔔' : '🔕';
+  muteToggle.title = soundEnabled ? 'Notifications on' : 'Notifications muted';
 
   if (tokenInput.value) {
     connect();
@@ -134,7 +149,7 @@
     }
 
     if (message.type === 'permission') {
-      renderPermission(message);
+      queuePermission(message);
       addToLog({
         type: 'event',
         event: 'permission_required',
@@ -142,6 +157,16 @@
         detail: message.message,
         timestamp: message.timestamp
       });
+      return;
+    }
+
+    if (message.type === 'permission_dismissed') {
+      dismissPermission(message.request_id);
+      return;
+    }
+
+    if (message.type === 'devices') {
+      renderDevices(message.devices);
       return;
     }
 
@@ -192,8 +217,28 @@
     eventCard.style.animation = '';
   }
 
-  function renderPermission(data) {
-    currentPermission = data;
+  function queuePermission(data) {
+    // Avoid duplicates in queue
+    if (permissionQueue.some((p) => p.request_id === data.request_id)) {
+      return;
+    }
+    permissionQueue.push(data);
+    updatePermissionBadge();
+    if (permissionQueue.length === 1) {
+      showCurrentPermission();
+    }
+  }
+
+  function showCurrentPermission() {
+    if (permissionQueue.length === 0) {
+      permissionScreen.hidden = true;
+      mainScreen.hidden = false;
+      device.classList.remove('permission-pulse');
+      updatePermissionBadge();
+      return;
+    }
+
+    const data = permissionQueue[0];
     mainScreen.hidden = true;
     summaryScreen.hidden = true;
     permissionScreen.hidden = false;
@@ -201,11 +246,26 @@
     permissionTool.textContent = data.tool_name || 'Tool';
     permissionCommand.textContent = data.command || data.message || data.file_path || 'No detail';
     permissionPath.textContent = data.file_path || data.cwd || '';
-    startPermissionCountdown();
+    startPermissionCountdown(data.timeout_s || DEFAULT_DECISION_SECONDS);
+    playNotificationSound();
+  }
+
+  function dismissPermission(requestId) {
+    const idx = permissionQueue.findIndex((p) => p.request_id === requestId);
+    if (idx === -1) return;
+    const wasFirst = idx === 0;
+    permissionQueue.splice(idx, 1);
+    updatePermissionBadge();
+    if (wasFirst) {
+      stopPermissionCountdown();
+      showCurrentPermission();
+    }
   }
 
   function renderSummary(data) {
     stopPermissionCountdown();
+    permissionQueue = [];
+    updatePermissionBadge();
     mainScreen.hidden = true;
     permissionScreen.hidden = true;
     summaryScreen.hidden = false;
@@ -216,28 +276,57 @@
     renderList(summaryCommands, data.commands_run);
   }
 
-  function sendAction(action) {
-    if (!currentPermission || !ws || ws.readyState !== WebSocket.OPEN) {
+  function renderDevices(devices) {
+    const list = Array.isArray(devices) ? devices : [];
+    const connected = list.filter((deviceInfo) => deviceInfo.connected);
+    deviceCount.textContent = String(connected.length);
+    if (!list.length) {
+      deviceList.innerHTML = '<div class="device-empty">No device connected</div>';
       return;
     }
+
+    deviceList.innerHTML = list.map((deviceInfo) => {
+      const status = deviceInfo.connected ? deviceInfo.status || 'online' : 'offline';
+      const detail = [
+        deviceInfo.ip || '-',
+        deviceInfo.firmware || '-',
+        formatRelative(deviceInfo.last_seen)
+      ].filter(Boolean).join(' · ');
+      return `
+        <div class="device-row ${deviceInfo.connected ? 'online' : 'offline'}">
+          <span class="device-dot"></span>
+          <div>
+            <strong>${escapeHtml(deviceInfo.name || 'ESP32 Companion')}</strong>
+            <span>${escapeHtml(status)} · ${escapeHtml(detail)}</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function sendAction(action) {
+    if (permissionQueue.length === 0 || !ws || ws.readyState !== WebSocket.OPEN) {
+      return;
+    }
+    const current = permissionQueue[0];
     ws.send(JSON.stringify({
       type: 'action',
-      request_id: currentPermission.request_id,
+      request_id: current.request_id,
       action
     }));
     stopPermissionCountdown();
-    currentPermission = null;
-    permissionScreen.hidden = true;
-    mainScreen.hidden = false;
+    permissionQueue.shift();
+    updatePermissionBadge();
     device.classList.remove('permission-pulse');
     device.classList.remove('flash-allow', 'flash-deny');
     device.offsetHeight;
     device.classList.add(action === 'allow' ? 'flash-allow' : 'flash-deny');
+    showCurrentPermission();
   }
 
-  function startPermissionCountdown() {
+  function startPermissionCountdown(seconds) {
     stopPermissionCountdown();
-    let remaining = DECISION_SECONDS;
+    let remaining = seconds || DEFAULT_DECISION_SECONDS;
     renderCountdown(remaining);
     permissionTimer = window.setInterval(() => {
       remaining -= 1;
@@ -259,6 +348,38 @@
     const minutes = Math.floor(seconds / 60);
     const rest = String(seconds % 60).padStart(2, '0');
     permissionTimeout.textContent = `Timeout: ${minutes}:${rest}`;
+  }
+
+  function updatePermissionBadge() {
+    const badge = document.getElementById('permissionBadge');
+    if (permissionQueue.length > 0) {
+      badge.textContent = String(permissionQueue.length);
+      badge.hidden = false;
+    } else {
+      badge.hidden = true;
+    }
+  }
+
+  function playNotificationSound() {
+    if (!soundEnabled) return;
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      // Dual tone notification beep
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.setValueAtTime(660, ctx.currentTime + 0.1);
+      osc.frequency.setValueAtTime(880, ctx.currentTime + 0.2);
+      gain.gain.setValueAtTime(0.15, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.35);
+    } catch (e) {
+      // AudioContext fails on silent page unless user has interacted, which is fine
+    }
   }
 
   function addToLog(data) {
@@ -321,6 +442,7 @@
     return map[state] || '#4488ff';
   }
 
+  // Parses folder name from full path
   function projectLabel(cwd) {
     if (!cwd) return '-';
     const normalized = String(cwd).replace(/\\/g, '/');
@@ -349,6 +471,18 @@
       minute: '2-digit',
       second: '2-digit'
     });
+  }
+
+  function formatRelative(timestamp) {
+    const date = timestamp ? new Date(timestamp) : null;
+    if (!date || Number.isNaN(date.getTime())) {
+      return 'never';
+    }
+    const seconds = Math.max(0, Math.round((Date.now() - date.getTime()) / 1000));
+    if (seconds < 5) return 'now';
+    if (seconds < 60) return `${seconds}s ago`;
+    const minutes = Math.round(seconds / 60);
+    return `${minutes}m ago`;
   }
 
   function escapeHtml(value) {

@@ -16,8 +16,10 @@
           <div class="brand">
             <span class="tiny-led" id="headerLed"></span>
             <span>Codex Companion</span>
+            <span class="permission-badge" id="permissionBadge" hidden>0</span>
           </div>
           <div class="wifi">
+            <button class="mute-toggle" id="muteToggle" type="button" title="Notifications on">🔔</button>
             <span id="clientCount">0</span>
             <span class="wifi-mark"></span>
           </div>
@@ -47,8 +49,14 @@
             <div class="event-time mono" id="eventTime">--:--:--</div>
           </section>
 
-          <section class="action-area" id="actionArea">
-            <div class="empty-action">No pending permission</div>
+          <section class="device-panel">
+            <div class="device-panel-title">
+              <span>Devices</span>
+              <strong id="deviceCount">0</strong>
+            </div>
+            <div class="device-list mono" id="deviceList">
+              <div class="device-empty">No device connected</div>
+            </div>
           </section>
 
           <section class="log-panel">

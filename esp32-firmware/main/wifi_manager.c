@@ -1,5 +1,6 @@
 #include "wifi_manager.h"
 
+#include <stdio.h>
 #include <string.h>
 
 #include "esp_check.h"
@@ -16,6 +17,7 @@ static EventGroupHandle_t s_wifi_event_group;
 static const int WIFI_CONNECTED_BIT = BIT0;
 static const int WIFI_FAIL_BIT = BIT1;
 static int s_retry_num;
+static char s_ip_address[16] = "-";
 
 static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
 {
@@ -34,6 +36,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
         }
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
+        snprintf(s_ip_address, sizeof(s_ip_address), IPSTR, IP2STR(&event->ip_info.ip));
         ESP_LOGI(TAG, "Got IP: " IPSTR, IP2STR(&event->ip_info.ip));
         s_retry_num = 0;
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
@@ -87,4 +90,9 @@ esp_err_t wifi_manager_start(void)
 
     ESP_LOGE(TAG, "Failed to connect to %s", CONFIG_COMPANION_WIFI_SSID);
     return ESP_FAIL;
+}
+
+const char *wifi_manager_ip_address(void)
+{
+    return s_ip_address;
 }
